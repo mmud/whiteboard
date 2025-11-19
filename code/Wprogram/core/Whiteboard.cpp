@@ -90,77 +90,62 @@ void Whiteboard::render() {
     renderer->Clear();
     shader->Bind();
 
+    shader->SetUniform2f("circleCenter", 0.5f, 0.5f);
+
+    glm::mat4 vp = proj * view;
+
     for (int i = 0; i < strokes.size(); i++) {
         Stroke& stroke = strokes[i];
+
+        if (stroke.circles.empty()) continue;
+
+        shader->SetUniform4f("u_color",stroke.color[0],stroke.color[1],stroke.color[2],1.0f);
+
+        shader->SetUniform1f("circleRadius", stroke.brushSize);
 
         for (int j = 0; j < stroke.circles.size(); j++) {
             Circle& circle = stroke.circles[j];
 
-            glm::mat4 model = glm::mat4(1.0f);
-
-            model = glm::translate(model, glm::vec3(
-                circle.centerX,
-                circle.centerY,
-                0.0f
-            ));
-
             float diameter = circle.raduis * 2.0f;
-            model = glm::scale(model, glm::vec3(
-                diameter,
-                diameter,
-                1.0f
-            ));
 
-            glm::mat4 mvp = proj * view * model;
+            glm::mat4 model(
+                diameter, 0.0f, 0.0f, 0.0f,
+                0.0f, diameter, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                circle.centerX, circle.centerY, 0.0f, 1.0f
+            );
+
+            glm::mat4 mvp = vp * model;
 
             shader->SetUniformMat4f("u_MVP", mvp);
-
-            shader->SetUniform4f("u_color",
-                stroke.color[0],
-                stroke.color[1],
-                stroke.color[2],
-                1.0f);
-
-            shader->SetUniform2f("circleCenter", 0.5f, 0.5f);
-
-            shader->SetUniform1f("circleRadius", stroke.brushSize);
-
             renderer->Draw(*va, *ib, *shader);
         }
     }
 
     if (isDrawing && !tempCircles.empty()) {
-        for (int i = 0; i < tempCircles.size(); i++) {
-            Circle& circle = tempCircles[i];
+        shader->SetUniform4f("u_color",
+            currentColor[0],
+            currentColor[1],
+            currentColor[2],
+            1.0f);
 
-            glm::mat4 model = glm::mat4(1.0f);
+        shader->SetUniform1f("circleRadius", currentBrushSize);
 
-            model = glm::translate(model, glm::vec3(
-                circle.centerX,
-                circle.centerY,
-                0.0f
-            ));
+        for (size_t i = 0; i < tempCircles.size(); i++) {
+            const Circle& circle = tempCircles[i];
 
             float diameter = circle.raduis * 2.0f;
-            model = glm::scale(model, glm::vec3(
-                diameter,
-                diameter,
-                1.0f
-            ));
 
-            glm::mat4 mvp = proj * view * model;
+            glm::mat4 model(
+                diameter, 0.0f, 0.0f, 0.0f,
+                0.0f, diameter, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                circle.centerX, circle.centerY, 0.0f, 1.0f
+            );
+
+            glm::mat4 mvp = vp * model;
 
             shader->SetUniformMat4f("u_MVP", mvp);
-
-            shader->SetUniform4f("u_color",
-                currentColor[0],
-                currentColor[1],
-                currentColor[2],
-                1.0f);
-
-            shader->SetUniform2f("circleCenter", 0.5f, 0.5f);
-            shader->SetUniform1f("circleRadius", currentBrushSize);
-
             renderer->Draw(*va, *ib, *shader);
         }
     }

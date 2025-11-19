@@ -338,9 +338,6 @@ int main()
 
             ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
-
-            /*88888888888888888888888888888888888888888888888888888888888888888*/
-
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -362,11 +359,7 @@ int main()
 #endif
         
 
-        ImGui::Spacing();
-
-        /*8888888888888888888888888888888888888888888888888888888888888888*/
-
-
+            ImGui::Spacing();
 
             ImGui::End();
 
