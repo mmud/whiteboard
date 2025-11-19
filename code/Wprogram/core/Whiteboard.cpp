@@ -189,3 +189,89 @@ void Whiteboard::updateProjection(int width, int height) {
         -1.0f, 1.0f
     );
 }
+
+bool Whiteboard::saveDrawing(const std::string& filename,int sidebarWidth,int windowWidth,int windowHeight) {
+    int drawingWidth = windowWidth - sidebarWidth;
+    int drawingHeight = windowHeight;
+
+    unsigned char* pixels = new unsigned char[drawingWidth * drawingHeight * 4];
+
+    glReadPixels(
+        sidebarWidth,      // x: skip sidebar
+        0,                 // y: from bottom
+        drawingWidth,      // width: drawing area only
+        drawingHeight,     // height: full height
+        GL_RGBA,           // format: Red, Green, Blue, Alpha
+        GL_UNSIGNED_BYTE,  // type: 8-bit unsigned byte per channel
+        pixels             // destination buffer
+    );
+
+    // Flip image vertically (OpenGL is bottom-to-top, images are top-to-bottom)
+    unsigned char* flippedPixels = new unsigned char[drawingWidth * drawingHeight * 4];
+    for (int y = 0; y < drawingHeight; y++) {
+        memcpy(
+            flippedPixels + (drawingHeight - 1 - y) * drawingWidth * 4,
+            pixels + y * drawingWidth * 4,
+            drawingWidth * 4
+        );
+    }
+
+    // Get file extension
+    std::string ext = "";
+    size_t dotPos = filename.find_last_of(".");
+    if (dotPos != std::string::npos) {
+        ext = filename.substr(dotPos + 1);
+        // Convert to lowercase
+        for (char& c : ext) {
+            c = tolower(c);
+        }
+    }
+
+    int result = 0;
+
+    if (ext == "png") {
+        result = stbi_write_png(
+            filename.c_str(),        // filename
+            drawingWidth,            // width
+            drawingHeight,           // height
+            4,                       // channels (RGBA)
+            flippedPixels,          // pixel data
+            drawingWidth * 4        // stride (bytes per row)
+        );
+    }
+    else if (ext == "jpg" || ext == "jpeg") {
+        result = stbi_write_jpg(
+            filename.c_str(),        // filename
+            drawingWidth,            // width
+            drawingHeight,           // height
+            4,                       // channels (RGBA)
+            flippedPixels,          // pixel data
+            95                      // quality (1-100, 95 is high quality)
+        );
+    }
+    else if (ext == "bmp") {
+        result = stbi_write_bmp(
+            filename.c_str(),        // filename
+            drawingWidth,            // width
+            drawingHeight,           // height
+            4,                       // channels (RGBA)
+            flippedPixels           // pixel data
+        );
+    }
+    else {
+        std::string pngFilename = filename + ".png";
+        result = stbi_write_png(
+            pngFilename.c_str(),
+            drawingWidth,
+            drawingHeight,
+            4,
+            flippedPixels,
+            drawingWidth * 4
+        );
+    }
+
+    delete[] pixels;
+    delete[] flippedPixels;
+
+    return result != 0;
+}

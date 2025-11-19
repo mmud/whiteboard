@@ -11,6 +11,7 @@
 #include "Renderer.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include <stb_image_write.h>
 
 class Whiteboard {
 private:
@@ -56,4 +57,6 @@ public:
     bool getIsDrawing() {return isDrawing;}
 
     void updateProjection(int width, int height);
+
+    bool saveDrawing(const std::string& filename, int sidebarWidth, int windowWidth, int windowHeight);
 };

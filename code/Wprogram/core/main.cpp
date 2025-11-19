@@ -17,6 +17,14 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include "Whiteboard.h"
 #include "Command.h"
 #include "DrawCommand.h"
@@ -27,6 +35,33 @@ std::stack<Command*>* g_redoStack = nullptr;
 double g_lastMouseX = 0.0;
 double g_lastMouseY = 0.0;
 const float SIDEBAR_WIDTH = 300.0f;
+
+#ifdef _WIN32
+std::string openSaveFileDialog() {
+    char filename[MAX_PATH] = "whiteboard.png";
+
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "PNG Image (*.png)\0*.png\0"
+        "JPEG Image (*.jpg)\0*.jpg;*.jpeg\0"
+        "BMP Image (*.bmp)\0*.bmp\0"
+        "All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+    ofn.lpstrDefExt = "png";
+    ofn.lpstrTitle = "Save Whiteboard Drawing";
+
+    if (GetSaveFileNameA(&ofn)) {
+        return std::string(filename);
+    }
+
+    return "";
+}
+#endif
 
 glm::vec2 screenToWorld(double screenX, double screenY,
     int windowWidth, int windowHeight) {
@@ -302,6 +337,36 @@ int main()
 
 
             ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+
+
+            /*88888888888888888888888888888888888888888888888888888888888888888*/
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+#ifdef _WIN32
+            if (ImGui::Button("Save as", ImVec2(-1, 45))) {
+                std::string filename = openSaveFileDialog();
+
+                if (!filename.empty()) {
+                    int display_w, display_h;
+                    glfwGetFramebufferSize(window, &display_w, &display_h);
+
+                    bool success = whiteboard.saveDrawing(filename, SIDEBAR_WIDTH, display_w, display_h);
+
+                    if (!success)
+                        std::cerr << "Failed to save the image" << std::endl;
+                }
+            }
+#endif
+        
+
+        ImGui::Spacing();
+
+        /*8888888888888888888888888888888888888888888888888888888888888888*/
+
+
 
             ImGui::End();
 
