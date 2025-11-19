@@ -15,6 +15,13 @@ bool GLLogCall(const char* function, const char* file, int line)
     return true;
 }
 
+Renderer::Renderer() {}
+
+Renderer& Renderer::getInstance() {
+    static Renderer instance;
+    return instance;
+}
+
 void Renderer::Draw(const VertexArray& va, const IndexBuffer& ib, const Shader& shader)const
 {
     shader.Bind();

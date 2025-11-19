@@ -3,7 +3,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
-#include<iostream>
+#include <iostream>
+#include <stack>
 
 #include "Renderer.h"
 #include "VertexBuffer.h"
@@ -16,6 +17,101 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
+#include "Whiteboard.h"
+#include "Command.h"
+#include "DrawCommand.h"
+
+Whiteboard* g_whiteboard = nullptr;
+std::stack<Command*>* g_undoStack = nullptr;
+std::stack<Command*>* g_redoStack = nullptr;
+double g_lastMouseX = 0.0;
+double g_lastMouseY = 0.0;
+const float SIDEBAR_WIDTH = 300.0f;
+
+glm::vec2 screenToWorld(double screenX, double screenY,
+    int windowWidth, int windowHeight) {
+    // Adjust for sidebar
+    float adjustedWidth = windowWidth - SIDEBAR_WIDTH;
+    float adjustedX = screenX - SIDEBAR_WIDTH;
+
+    // Calculate aspect ratio
+    float aspect = adjustedWidth / (float)windowHeight;
+
+    // Normalize screen coordinates (0 to 1)
+    float normalizedX = adjustedX / adjustedWidth;
+    float normalizedY = screenY / windowHeight;
+
+    // Convert to world coordinates (-2*aspect to 2*aspect, -2 to 2)
+    float worldX = normalizedX * (4.0f * aspect) - (2.0f * aspect);
+    float worldY = 2.0f - normalizedY * 4.0f;
+
+    return glm::vec2(worldX, worldY);
+}
+
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+
+            if (xpos >= SIDEBAR_WIDTH) {
+                int width, height;
+                glfwGetFramebufferSize(window, &width, &height);
+
+                glm::vec2 worldPos = screenToWorld(xpos, ypos, width, height);
+
+                g_whiteboard->startDrawing(worldPos.x, worldPos.y);
+
+                g_lastMouseX = worldPos.x;
+                g_lastMouseY = worldPos.y;
+            }
+        }
+        else if (action == GLFW_RELEASE) {
+            if (g_whiteboard->getIsDrawing()) {
+                DrawCommand* cmd = g_whiteboard->endDrawing();
+
+                if (cmd != nullptr) {
+                    cmd->execute();
+
+                    g_undoStack->push(cmd);
+
+                    while (!g_redoStack->empty()) {
+                        delete g_redoStack->top();
+                        g_redoStack->pop();
+                    }
+                }
+            }
+        }
+    }
+}
+
+void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
+        g_whiteboard->getIsDrawing()) {
+
+        if (xpos >= SIDEBAR_WIDTH) {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            glm::vec2 worldPos = screenToWorld(xpos, ypos, width, height);
+
+            float dx = worldPos.x - g_lastMouseX;
+            float dy = worldPos.y - g_lastMouseY;
+            float distance = sqrt(dx * dx + dy * dy);
+
+            if (distance > 0.001f) {
+                g_whiteboard->addCircle(worldPos.x, worldPos.y);
+
+                
+
+                g_lastMouseX = worldPos.x;
+                g_lastMouseY = worldPos.y;
+            }
+        }
+    }
+}
+
+
 int main()
 {
 	 GLFWwindow* window;
@@ -26,13 +122,15 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
+    window = glfwCreateWindow(1280 , 600, "Hello World", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
         return -1;
     }
+
 
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
@@ -40,7 +138,7 @@ int main()
     gladLoadGL();
 
     {//to fix the program terminate
-        float positoins[] = {
+        /*float positoins[] = {
             -0.5f, -0.5f, 0.0f, 0.0f,
              0.5f, -0.5f, 1.0f, 0.0f,
              0.5f,  0.5f, 1.0f, 1.0f,
@@ -79,8 +177,23 @@ int main()
         shader.SetUniformMat4f("u_MVP", mvp);
         shader.SetUniform2f("circleCenter", 0.5, 0.5);
         shader.SetUniform1f("circleRadius", 0.5);
+        */
 
-        Renderer renderer;
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+        Whiteboard whiteboard(width - SIDEBAR_WIDTH, height);
+
+        std::stack<Command*> undoStack;
+        std::stack<Command*> redoStack;
+
+
+        g_whiteboard = &whiteboard;
+        g_undoStack = &undoStack;
+        g_redoStack = &redoStack;
+
+
+        glfwSetMouseButtonCallback(window, mouseButtonCallback);
+        glfwSetCursorPosCallback(window, cursorPosCallback);
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -92,8 +205,8 @@ int main()
         ImGui_ImplGlfw_InitForOpenGL(window, true);
         ImGui_ImplOpenGL3_Init("#version 330");
 
-        float bgColor[3] = { 0.2f, 0.3f, 0.4f };
-        float rd = 0.0f;
+        float brushColor[3] = { 0.2f, 0.3f, 0.4f };
+        float brushSize = 0.0f;
 
         while (!glfwWindowShouldClose(window))
         {
@@ -102,23 +215,56 @@ int main()
             int display_w, display_h;
             glfwGetFramebufferSize(window, &display_w, &display_h);
 
-            const float sidebar_width = 300.0f;
+            // Undo (Ctrl+Z)
+            if (ImGui::IsKeyPressed(ImGuiKey_Z) &&
+                (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) ||
+                    ImGui::IsKeyDown(ImGuiKey_RightCtrl))) {
 
-            glViewport(sidebar_width, 0, display_w - sidebar_width, display_h);
+                if (!undoStack.empty()) {
+                    Command* cmd = undoStack.top();
+                    undoStack.pop();
 
-            renderer.Clear();
+                    cmd->undo();
 
-            shader.Bind();
-            shader.SetUniform4f("u_color", bgColor[0], bgColor[1], bgColor[2], 1.0f);
-            shader.SetUniform1f("circleRadius", rd);
-            renderer.Draw(va, ib, shader);
+                    redoStack.push(cmd);
+                }
+            }
+
+            // Redo (Ctrl+Y or Ctrl+Shift+Z)
+            if ((ImGui::IsKeyPressed(ImGuiKey_Y) &&
+                (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) ||
+                    ImGui::IsKeyDown(ImGuiKey_RightCtrl))) ||
+                (ImGui::IsKeyPressed(ImGuiKey_Z) &&
+                    (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) ||
+                        ImGui::IsKeyDown(ImGuiKey_RightCtrl)) &&
+                    (ImGui::IsKeyDown(ImGuiKey_LeftShift) ||
+                        ImGui::IsKeyDown(ImGuiKey_RightShift)))) {
+
+                if (!redoStack.empty()) {
+                    Command* cmd = redoStack.top();
+                    redoStack.pop();
+
+                    cmd->execute();
+
+                    undoStack.push(cmd);
+                }
+            }
+
+
+            glViewport(SIDEBAR_WIDTH, 0, display_w - SIDEBAR_WIDTH, display_h);
+
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+            g_whiteboard->setColor(brushColor[0], brushColor[1], brushColor[2]);
+            g_whiteboard->setBrushSize(brushSize);
+            g_whiteboard->render();
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
             ImGui::SetNextWindowPos(ImVec2(0, 0));
-            ImGui::SetNextWindowSize(ImVec2(sidebar_width, (float)display_h));
+            ImGui::SetNextWindowSize(ImVec2(SIDEBAR_WIDTH, (float)display_h));
             ImGui::Begin("Sidebar", nullptr,
                 ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_NoResize |
@@ -127,12 +273,22 @@ int main()
             ImGui::Text("Controls");
             ImGui::Separator();
 
-            ImGui::ColorEdit3("circle Color", bgColor);
-            ImGui::SliderFloat("circle Radius", &rd, 0.0f, 0.5f);
+            ImGui::ColorEdit3("circle Color", brushColor);
+            ImGui::SliderFloat("circle Radius", &brushSize, 0.0f, 0.5f);
 
-            if (ImGui::Button("Reset")) {
-                rd = 0.0f;
+            if (ImGui::Button("Clear")) {
+                whiteboard.clear();
+
+                while (!undoStack.empty()) {
+                    delete undoStack.top();
+                    undoStack.pop();
+                }
+                while (!redoStack.empty()) {
+                    delete redoStack.top();
+                    redoStack.pop();
+                }
             }
+
 
             ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
@@ -147,6 +303,15 @@ int main()
             glfwSwapBuffers(window);
         }
         // Cleanup
+        while (!undoStack.empty()) {
+            delete undoStack.top();
+            undoStack.pop();
+        }
+
+        while (!redoStack.empty()) {
+            delete redoStack.top();
+            redoStack.pop();
+        }
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
