@@ -99,10 +99,21 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
             float dy = worldPos.y - g_lastMouseY;
             float distance = sqrt(dx * dx + dy * dy);
 
-            if (distance > 0.001f) {
+            if (distance > 0.01f) {
                 g_whiteboard->addCircle(worldPos.x, worldPos.y);
 
-                
+                if (distance > 0.05) {
+                    int numSteps = (int)(distance / 0.05) + 1;
+
+                    for (int i = 1; i <= numSteps; i++) {
+                        float t = (float)i / (float)numSteps;
+
+                        float interpX = g_lastMouseX + dx * t;
+                        float interpY = g_lastMouseY + dy * t;
+
+                        g_whiteboard->addCircle(interpX, interpY);
+                    }
+                }
 
                 g_lastMouseX = worldPos.x;
                 g_lastMouseY = worldPos.y;
@@ -206,7 +217,7 @@ int main()
         ImGui_ImplOpenGL3_Init("#version 330");
 
         float brushColor[3] = { 0.2f, 0.3f, 0.4f };
-        float brushSize = 0.0f;
+        float brushSize = 0.3f;
 
         while (!glfwWindowShouldClose(window))
         {
@@ -274,7 +285,7 @@ int main()
             ImGui::Separator();
 
             ImGui::ColorEdit3("circle Color", brushColor);
-            ImGui::SliderFloat("circle Radius", &brushSize, 0.0f, 0.5f);
+            ImGui::SliderFloat("circle Radius", &brushSize, 0.15f, 0.5f);
 
             if (ImGui::Button("Clear")) {
                 whiteboard.clear();
