@@ -42,6 +42,8 @@ Whiteboard::Whiteboard(int width, int height) {
 
     currentBrushSize = 0.05f;
 
+    currentMode = DrawingMode::DRAW;
+
     isDrawing = false;
 }
 
@@ -56,34 +58,78 @@ void Whiteboard::startDrawing(float x, float y) {
     isDrawing = true;
 
     tempCircles.clear();
-
-    Circle firstCircle(x, y, currentBrushSize);
-    tempCircles.push_back(firstCircle);
+    erasedStrokeIndices.clear();
+    if (currentMode == DrawingMode::DRAW) {
+        Circle firstCircle(x, y, currentBrushSize);
+        tempCircles.push_back(firstCircle);
+    }
+    else
+    {
+        for (int i = 0; i < strokes.size(); i++) {
+            if (strokeIntersectsEraser(strokes[i], x, y, currentBrushSize)) {
+                if (std::find(erasedStrokeIndices.begin(),
+                    erasedStrokeIndices.end(), i) == erasedStrokeIndices.end()) {
+                    erasedStrokeIndices.push_back(i);
+                }
+            }
+        }
+    }
 }
 
 void Whiteboard::addCircle(float x, float y) {
     if (!isDrawing) return;
-
-    Circle newCircle(x, y, currentBrushSize);
-    tempCircles.push_back(newCircle);
+    if (currentMode == DrawingMode::DRAW) {
+        Circle newCircle(x, y, currentBrushSize);
+        tempCircles.push_back(newCircle);
+    }
+    else
+    {
+        for (int i = 0; i < strokes.size(); i++) {
+            if (strokeIntersectsEraser(strokes[i], x, y, currentBrushSize)) {
+                if (std::find(erasedStrokeIndices.begin(),
+                    erasedStrokeIndices.end(), i) == erasedStrokeIndices.end()) {
+                    erasedStrokeIndices.push_back(i);
+                }
+            }
+        }
+    }
 }
 
-DrawCommand* Whiteboard::endDrawing() {
+Command* Whiteboard::endDrawing() {
     if (!isDrawing) return nullptr; 
 
     isDrawing = false;
 
-    if (tempCircles.empty()) return nullptr;
-    
+    if (currentMode == DrawingMode::DRAW) {
+        if (tempCircles.empty()) return nullptr;
 
-    DrawCommand* cmd = new DrawCommand(
-        tempCircles,
-        currentColor,
-        currentBrushSize,
-        &strokes
-    );
 
-    return cmd;
+        DrawCommand* cmd = new DrawCommand(
+            tempCircles,
+            currentColor,
+            currentBrushSize,
+            &strokes
+        );
+
+        return cmd;
+    }
+    else
+    {
+
+        if (erasedStrokeIndices.empty()) {
+            return nullptr;
+        }
+
+        std::sort(erasedStrokeIndices.begin(), erasedStrokeIndices.end(), std::greater<int>());
+
+        EraseCommand* cmd = new EraseCommand(
+            erasedStrokeIndices,
+            &strokes
+        );
+
+        erasedStrokeIndices.clear();
+        return cmd;
+    }
 }
 
 void Whiteboard::render() {
@@ -99,7 +145,13 @@ void Whiteboard::render() {
 
         if (stroke.circles.empty()) continue;
 
-        shader->SetUniform4f("u_color",stroke.color[0],stroke.color[1],stroke.color[2],1.0f);
+        bool beingErased = std::find(erasedStrokeIndices.begin(),
+            erasedStrokeIndices.end(),
+            i) != erasedStrokeIndices.end();
+
+        float alpha = beingErased ? 0.3f : 1.0f;
+
+        shader->SetUniform4f("u_color",stroke.color[0],stroke.color[1],stroke.color[2],alpha);
 
         shader->SetUniform1f("circleRadius", stroke.brushSize);
 
@@ -173,6 +225,27 @@ void Whiteboard::updateProjection(int width, int height) {
         -2.0f, 2.0f,
         -1.0f, 1.0f
     );
+}
+
+void Whiteboard::setDrawingMode(DrawingMode mode) {
+    currentMode = mode;
+}
+
+bool Whiteboard::circleIntersectsEraser(const Circle& circle, float eraserX, float eraserY, float eraserRad) {
+    float dx = circle.centerX - eraserX;
+    float dy = circle.centerY - eraserY;
+    float distance = sqrt(dx * dx + dy * dy);
+
+    return distance < (circle.raduis + eraserRad);
+}
+
+bool Whiteboard::strokeIntersectsEraser(const Stroke& stroke, float eraserX, float eraserY, float eraserRad) {
+    for (const auto& circle : stroke.circles) {
+        if (circleIntersectsEraser(circle, eraserX, eraserY, eraserRad)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Whiteboard::saveDrawing(const std::string& filename,int sidebarWidth,int windowWidth,int windowHeight) {

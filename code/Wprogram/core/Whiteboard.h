@@ -1,8 +1,10 @@
 #pragma once
 #include <vector>
+#include <algorithm>
 #include "Stroke.h"
 #include "Circle.h"
 #include "DrawCommand.h"
+#include "EraseCommand.h"
 #include "VertexArray.h"
 #include "VertexBuffer.h"
 #include "VertexBufferLayout.h"
@@ -31,7 +33,15 @@ private:
     bool isDrawing;
     std::vector<Circle> tempCircles;
 
+    std::vector<int> erasedStrokeIndices;
 public:
+    enum class DrawingMode {
+        DRAW,
+        ERASE
+    };
+
+    DrawingMode currentMode;
+
     Whiteboard(int width, int height);
         
     ~Whiteboard();
@@ -40,7 +50,7 @@ public:
 
     void addCircle(float x, float y);
 
-    DrawCommand* endDrawing();
+    Command* endDrawing();
 
     void render();
 
@@ -57,6 +67,16 @@ public:
     bool getIsDrawing() {return isDrawing;}
 
     void updateProjection(int width, int height);
+
+    void setDrawingMode(DrawingMode mode);
+
+    DrawingMode getDrawingMode() {return currentMode;}
+
+    bool circleIntersectsEraser(const Circle& circle, float eraserX, float eraserY, float eraserRad);
+
+    bool strokeIntersectsEraser(const Stroke& stroke, float eraserX, float eraserY, float eraserRad);
+
+    std::vector<int>& getErasedStrokeIndices() {return erasedStrokeIndices;}
 
     bool saveDrawing(const std::string& filename, int sidebarWidth, int windowWidth, int windowHeight);
 };
